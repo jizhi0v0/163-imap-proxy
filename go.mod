@@ -1,4 +1,4 @@
-module github.com/163-gmail-server-wrapper
+module github.com/jizhi0v0/163-imap-proxy
 
 go 1.26.2
 

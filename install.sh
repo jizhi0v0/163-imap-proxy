@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-REPO="jizhi0v0/163-gmail-server-wrapper"
+REPO="jizhi0v0/163-imap-proxy"
 DATA_DIR="/etc/163-wrapper"
 
 # ── 颜色输出 ──────────────────────────────────────────────────────────────────
@@ -112,7 +112,7 @@ install_docker() {
   cat > "${COMPOSE_DIR}/docker-compose.yml" <<EOF
 services:
   163-wrapper:
-    image: ghcr.io/jizhi0v0/163-gmail-server-wrapper:latest
+    image: ghcr.io/jizhi0v0/163-imap-proxy:latest
     restart: unless-stopped
     ports:
       - "993:993"

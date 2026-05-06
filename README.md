@@ -1,168 +1,125 @@
-# 163-gmail-server-wrapper
+# 163-imap-proxy
 
-让 Apple Mail / Thunderbird 等标准 IMAP 客户端能在海外或非常用网络下访问 163 邮箱。
+让 **Spark Mail** 能用 163 邮箱。
 
-## 背景
+## 它解决什么问题
 
-163/126 邮箱有两个独有限制：
+163 邮箱有个非标准要求：客户端 `LOGIN` 成功后必须立刻发送 `ID` 命令自报身份（RFC 2971），否则 163 返回 `Unsafe Login` 并断开。Spark 没有为 163 实现这个特殊握手，所以加 163 账号必失败。
 
-1. **`Unsafe Login`**：客户端 `LOGIN` 成功后必须立刻发送非标准的 `ID` 命令（RFC 2971，自报客户端身份），否则服务器返回 `BAD Unsafe Login` 并断开。Apple Mail / Thunderbird 等通用客户端不发 ID。
-2. **海外 IP 风控**：从非中国大陆 IP 直连 `imap.163.com` 经常被限速或拒绝。
+本工具在你的服务器上跑一个 IMAP 代理：监听 `:993`，上游连 `imap.163.com`，检测到 `LOGIN OK` 后自动替 Spark 注入 `ID` 命令（伪装成 Foxmail），其余字节透传。
 
-本工具在你信任的位置（VPS / 家庭服务器 / 本机）跑一个 IMAP 代理：
+## 准备
 
-- 监听 IMAPS（默认 `0.0.0.0:993`）
-- 上游连 `imap.163.com:993`
-- 检测到 `LOGIN OK` 后自动注入 `ID` 命令（伪装成 Foxmail），其余流量纯字节透传
-- 自动加载或自签 TLS 证书
+- 一台 Linux 服务器（**本指南假设 Ubuntu 22.04+ 或 Debian 12+**），有 root 权限
+- 一个你拥有的域名，下文以 `mail.example.com` 为例
+- 服务器需要能从公网访问 80 和 993 端口（80 仅证书申请/续期时短暂占用）
 
-**只代理 IMAP**。SMTP 直连 `smtp.163.com` 即可，不经过本代理（见下文 SMTP 部分）。
+> 如果你用宝塔面板 / nginx / Apache 等已经占着 80 端口的服务，**先临时停掉**它们，否则证书申请会失败。`sudo lsof -i:80` 应该没有任何输出。
 
-## 推荐部署：VPS + Let's Encrypt
+## 部署
 
-最稳的姿势——在境外 VPS 上跑 wrapper，配合自有域名 + LE 证书，邮件客户端按标准 IMAPS 配置即可。
+### 1. 把域名指向服务器
 
-### 一键安装（systemd 或 Docker 二选一）
+到你的 DNS 服务商那里，给 `mail.example.com` 加一条 **A 记录**指向服务器公网 IP。
+
+**如果用 Cloudflare 托管**：在 DNS 页面，记录右侧的橙色云朵图标**点一下让它变成灰色**（DNS only），然后保存。否则 Cloudflare 会拦截 993 端口让连接永远失败。
+
+### 2. 放行防火墙
+
+服务器系统自带 ufw 的话：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jizhi0v0/163-gmail-server-wrapper/main/install.sh -o install.sh
+sudo ufw allow 80/tcp
+sudo ufw allow 993/tcp
+```
+
+**云厂商（阿里云 / 腾讯云 / AWS / DMIT 等）还要在网页控制台的"安全组"里**放行 80 和 993，不然系统层放了也没用。
+
+### 3. 一键安装 wrapper
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jizhi0v0/163-imap-proxy/main/install.sh -o install.sh
 sudo sh install.sh
 ```
 
-脚本会让你交互选择 systemd 或 Docker 模式，并写入 `/etc/163-wrapper/config.yaml` 与对应的 service / compose 文件。
+脚本会问你选 systemd 还是 Docker——**不确定就选 1（systemd）**。安装完成后服务会自动启动。
 
-### 关闭 Cloudflare Proxy
+### 4. 申请 Let's Encrypt 证书
 
-如果你用 Cloudflare 托管 DNS，**必须把 wrapper 域名的 A 记录设置为 "DNS only"（灰云）**——Cloudflare 的橙云只代理 HTTP/HTTPS，不转发任意 TCP 端口，否则邮件客户端永远连不上。
-
-### 用 Let's Encrypt 证书替换自签证书
+把下面整段**作为一个整体**复制到终端（先把 `mail.example.com` 改成你自己的域名）：
 
 ```bash
 DOMAIN=mail.example.com
-sudo certbot certonly --standalone -d $DOMAIN
+
+sudo apt update && sudo apt install -y certbot
+sudo certbot certonly --standalone -d $DOMAIN --agree-tos --register-unsafely-without-email --non-interactive
 sudo cp /etc/letsencrypt/live/$DOMAIN/fullchain.pem /etc/163-wrapper/cert.pem
 sudo cp /etc/letsencrypt/live/$DOMAIN/privkey.pem  /etc/163-wrapper/key.pem
 sudo chmod 600 /etc/163-wrapper/key.pem
-sudo systemctl restart 163-wrapper      # Docker 模式：sudo docker restart 163-wrapper
-```
+sudo systemctl restart 163-wrapper
 
-自动续期 hook：
-
-```bash
 sudo tee /etc/letsencrypt/renewal-hooks/deploy/163-wrapper.sh > /dev/null <<EOF
 #!/bin/sh
-DOMAIN=$DOMAIN
-cp /etc/letsencrypt/live/\$DOMAIN/fullchain.pem /etc/163-wrapper/cert.pem
-cp /etc/letsencrypt/live/\$DOMAIN/privkey.pem  /etc/163-wrapper/key.pem
+cp /etc/letsencrypt/live/$DOMAIN/fullchain.pem /etc/163-wrapper/cert.pem
+cp /etc/letsencrypt/live/$DOMAIN/privkey.pem  /etc/163-wrapper/key.pem
 chmod 600 /etc/163-wrapper/key.pem
 systemctl restart 163-wrapper
 EOF
 sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/163-wrapper.sh
 ```
 
-### 验证
+> Docker 模式用户：把 `systemctl restart 163-wrapper` 两处都换成 `docker restart 163-wrapper`。
+
+### 5. 验证
 
 ```bash
-echo | openssl s_client -connect $DOMAIN:993 -servername $DOMAIN 2>&1 \
-  | grep -E "subject=|Verify return"
+echo | openssl s_client -connect mail.example.com:993 -servername mail.example.com 2>&1 | grep "Verify return code"
 ```
 
-期望看到 `subject=CN=mail.example.com` 和 `Verify return code: 0 (ok)`。
+看到 `Verify return code: 0 (ok)` 就成功了。
 
-## 邮件客户端配置（验证可用）
+## 在 Spark 添加 163 账号
 
-### IMAP（收件）
+163 网页端先做一次：登录 → 设置 → POP3/SMTP/IMAP → **同时打开 IMAP 和 SMTP 服务** → **生成"客户端授权码"**（下面填的"密码"全部用这个授权码，不是登录密码）。
+
+### Spark Mac
+
+1. 顶部菜单：`Spark → Add Account...`
+2. 选 **"Set Up Account Manually"**（不要用 163 预设）
+3. 选 **IMAP**
+4. 按下表填写，点 Sign In：
 
 | 字段 | 值 |
 |------|----|
-| 服务器 | 你的域名（如 `mail.example.com`），或 wrapper 监听的 IP |
-| 端口 | `993` |
-| 加密 | **SSL/TLS** |
-| 认证 | Normal Password |
-| 用户名 | 完整 163 邮箱（如 `you@163.com`） |
-| 密码 | 163 **授权码**（不是登录密码） |
+| Email Address | `you@163.com` |
+| Password | 163 授权码 |
+| User Name | `you@163.com`（完整邮箱） |
+| **IMAP Server** | `mail.example.com` |
+| IMAP Port | `993` |
+| Use SSL | ✅ 开启 |
+| **SMTP Server** | `smtp.163.com` |
+| SMTP Port | `587` |
+| Use SSL | ✅ 开启（STARTTLS） |
+| SMTP User Name | `you@163.com` |
+| SMTP Password | 163 授权码 |
 
-### SMTP（发件，直连 163）
+### Spark iOS
 
-wrapper 不代理 SMTP。客户端直接连 163 官方服务器：
+1. `Settings → Mail Accounts → Add Mail Account → Other`
+2. 同样选 IMAP，按上表填写
 
-| 字段 | 值 |
-|------|----|
-| 服务器 | `smtp.163.com` |
-| 端口 | `587` ⭐ 推荐 |
-| 加密 | **STARTTLS** |
-| 认证 | Normal Password |
-| 用户名 / 密码 | 同 IMAP |
+## 出问题怎么办
 
-> 备选端口 `465 + SSL/TLS` 也是 163 官方推荐的，但实测部分代理软件（Surge / Clash 的 TUN/VIF 模式）对 implicit TLS + 双栈并发握手处理有问题，会超时。**优先用 `587 + STARTTLS`**。
+**Spark 卡在加载或一直转圈**：在你电脑/手机上执行 `nc -vz mail.example.com 993`（Mac 终端 / iOS 用任意带 nc 的 App），如果连不通说明端口没真的对外开放——回到第 2 步检查防火墙和云厂商安全组。
 
-### 163 邮箱后台
+**`Verify return code` 不是 0**：证书没装好。在服务器上 `sudo ls /etc/163-wrapper/` 看 `cert.pem` 和 `key.pem` 是否都存在；不在就重跑第 4 步。
 
-登录 163 网页端 → 设置 → POP3/SMTP/IMAP：
-- **同时打开 IMAP 和 SMTP 两个开关**（独立的）
-- 生成**客户端授权码**，客户端填这个，不是登录密码
-
-## 本地 / 局域网部署（可选）
-
-如果不想搞 VPS，wrapper 也可以跑在本机或家庭服务器上（自签证书，需手动信任）。
-
-### 构建
+**看日志**（systemd 模式）：
 
 ```bash
-go build -o 163-wrapper .
+sudo journalctl -u 163-wrapper -f
 ```
 
-### 运行（自定义端口示例）
+按 Ctrl-C 退出。看到 `client connected` + `ID injected successfully` 就是 wrapper 工作正常。
 
-```bash
-cp config.example.yaml config.yaml
-# 把 listen 改成 "127.0.0.1:1993"（>1024，不需要 sudo）
-./163-wrapper -c config.yaml
-```
-
-### 信任自签证书（macOS）
-
-wrapper 首次启动会在 data 目录生成自签 `cert.pem`：
-
-```bash
-sudo security add-trusted-cert -d -r trustRoot \
-  -k /Library/Keychains/System.keychain \
-  ~/.163-wrapper/cert.pem
-```
-
-iOS 需把 `cert.pem` AirDrop 过去 → 设置 → 通用 → VPN 与设备管理 → 安装描述文件 → 设置 → 通用 → 关于本机 → 证书信任设置 → 启用完全信任。
-
-### 通过 Tailscale 远程访问
-
-`listen` 设为 `0.0.0.0:993`，客户端 IMAP 服务器填该机器的 Tailscale IP（`100.x.x.x`），Tailscale 隧道天然加密，自签证书也安全。
-
-## 调试
-
-把 `config.yaml` 里 `log_level` 改为 `debug`，每条 IMAP 帧都会打印（**注意：debug 会把 LOGIN 行连同授权码完整记录到日志**，调试完务必改回 `info` 并视情况重置授权码）。
-
-### 冒烟测试
-
-```bash
-( printf 'a1 LOGIN your@163.com YOUR_AUTHCODE\r\n'; sleep 2; \
-  printf 'a2 LIST "" "*"\r\n'; sleep 2; \
-  printf 'a3 LOGOUT\r\n'; sleep 1 ) | \
-  openssl s_client -quiet -connect mail.example.com:993 -servername mail.example.com 2>/dev/null
-```
-
-期望：`a1 OK LOGIN completed` → 列出收件箱、已发送等文件夹 → `a3 OK LOGOUT completed`。
-
-## 配置参考
-
-```yaml
-listen: "0.0.0.0:993"
-upstream: "imap.163.com:993"
-upstream_tls_server_name: "imap.163.com"
-log_level: "info"
-imap_id:                          # 注入给 163 的客户端身份（伪装成 Foxmail）
-  name: "Foxmail"
-  version: "7.2.25.230"
-  vendor: "Tencent"
-  support-email: "support@foxmail.com"
-```
-
-`-c` 指定配置文件、`-d` 指定数据目录（存 `cert.pem` / `key.pem`），命令行参数详见 `163-wrapper -h`。
+**重置授权码**：163 网页端可以随时重置；如果担心日志泄漏，重置后到客户端把密码改成新的授权码即可。
