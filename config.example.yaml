@@ -1,0 +1,9 @@
+listen: "127.0.0.1:1993"         # 改为 "0.0.0.0:1993" 供 Tailscale / Ponte 远程访问
+upstream: "imap.163.com:993"
+upstream_tls_server_name: "imap.163.com"
+log_level: "info"                 # debug 打印每一行 IMAP 帧
+imap_id:
+  name: "Foxmail"
+  version: "7.2.25.230"
+  vendor: "Tencent"
+  support-email: "support@foxmail.com"
