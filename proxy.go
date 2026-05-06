@@ -108,7 +108,7 @@ func runHandshake(client net.Conn, upstream *tls.Conn, cfg Config) error {
 		if err != nil {
 			return err
 		}
-		slog.Debug("client→server", "line", strings.TrimRight(string(line), "\r\n"))
+		slog.Debug("client→server", "line", RedactSensitive(string(line)))
 
 		if _, wErr := upstream.Write(line); wErr != nil {
 			return wErr

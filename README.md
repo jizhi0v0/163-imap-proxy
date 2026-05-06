@@ -122,4 +122,17 @@ sudo journalctl -u 163-wrapper -f
 
 按 Ctrl-C 退出。看到 `client connected` + `ID injected successfully` 就是 wrapper 工作正常。
 
-**重置授权码**：163 网页端可以随时重置；如果担心日志泄漏，重置后到客户端把密码改成新的授权码即可。
+**重置授权码**：163 网页端可以随时重置，新旧授权码互不影响；客户端那边对应改成新的即可。
+
+## 日志与隐私
+
+- 默认 `log_level: info`，只记录连接事件（远端 IP、`ID injected successfully` 等），不含任何凭据。
+- `log_level: debug` 时会打印每条 IMAP 帧用于排错，但 `LOGIN` / `AUTHENTICATE` 的密码字段会自动屏蔽成 `<REDACTED>`。
+- systemd 下日志由 journald 自动按磁盘空间轮转（默认约总盘 10%）。想严格限制：编辑 `/etc/systemd/journald.conf` 加 `SystemMaxUse=200M` 后 `sudo systemctl restart systemd-journald`。
+- Docker 默认 json-file 日志驱动**不轮转**，长跑会涨；建议在 `docker-compose.yml` 里给服务加：
+
+  ```yaml
+      logging:
+        driver: json-file
+        options: { max-size: "10m", max-file: "3" }
+  ```

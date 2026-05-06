@@ -74,6 +74,27 @@ func ParseTag(line string) (tag, cmd string) {
 	return parts[0], strings.ToUpper(parts[1])
 }
 
+// RedactSensitive 屏蔽 IMAP LOGIN / AUTHENTICATE 命令里的密码 / SASL 数据，
+// 用于 debug 日志输出，避免授权码落盘。其他帧原样返回。
+func RedactSensitive(line string) string {
+	s := strings.TrimRight(line, "\r\n")
+	parts := strings.SplitN(s, " ", 4)
+	if len(parts) < 3 {
+		return s
+	}
+	switch strings.ToUpper(parts[1]) {
+	case "LOGIN", "AUTHENTICATE":
+		// LOGIN:        <tag> LOGIN <user> <pass>
+		// AUTHENTICATE: <tag> AUTHENTICATE <mechanism> [<initial-response>]
+		if len(parts) == 4 {
+			return parts[0] + " " + parts[1] + " " + parts[2] + " <REDACTED>"
+		}
+		// 命令含 literal {N} 或换行续行——保守地把第 3 字段后全部抹掉
+		return parts[0] + " " + parts[1] + " <REDACTED>"
+	}
+	return s
+}
+
 // BuildIDCommand 根据配置构建 ID 命令字符串。
 func BuildIDCommand(idTag string, id IMAPIDConfig) string {
 	return fmt.Sprintf(
