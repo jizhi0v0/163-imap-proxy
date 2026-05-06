@@ -129,6 +129,16 @@ sudo chmod +x /etc/cron.monthly/163-wrapper-cert
 
 跟下文一样，把 IMAP Server 填成 `mailproxy.tail-xxxxxx.ts.net`，其他不变。设备只要连着 Tailscale，邮件就能正常收发。
 
+### 权衡：失去 Spark 推送通知
+
+Spark 客户端在前台/活跃时是**本地**连 IMAP，Tailscale 完全够用；但 App 完全退出或设备长时间离线时，新邮件提醒由 **Readdle 云端**替你 IDLE 监听 IMAP 后通过 APNs 推送到设备——他们的服务器不在你 tailnet 里，所以这条路**收不到推送**，必须打开 App 手动刷新才能看到新邮件。
+
+这个限制对**任何非公网部署**都成立（局域网 / 家庭服务器 / Tailscale 都一样）。**只有"公网 VPS + 域名 + LE 证书"那条路能让 Readdle 云端 IDLE 你的 wrapper、保留实时推送**——代价是 163 授权码会被传到他们机房用于维持长连接。
+
+按你对 push 的依赖度自己选：
+- 重度依赖即时通知 → 公网 VPS 路径
+- 不在乎几分钟延迟、追求凭据不出私网 → Tailscale / 本地路径
+
 ## 在 Spark 添加 163 账号
 
 163 网页端先做一次：登录 → 设置 → POP3/SMTP/IMAP → **同时打开 IMAP 和 SMTP 服务** → **生成"客户端授权码"**（下面填的"密码"全部用这个授权码，不是登录密码）。
