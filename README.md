@@ -80,6 +80,9 @@ echo | openssl s_client -connect mail.example.com:993 -servername mail.example.c
 
 ## 可选：用 Tailscale 替代域名 + 公网
 
+<details>
+<summary><b>展开查看</b>（注意：Tailscale 路径会失去 Spark 的 APNs 后台推送，且会反复弹"无法连接服务器"横幅。**先读完末尾的"权衡"小节再决定是否走这条路**）</summary>
+
 不想买域名、不想暴露公网 993 端口的话，可以走 Tailscale。每台用邮件的设备（手机、电脑）也装 Tailscale 登同一账号即可——这样你跳过上面的 1、2、4 步，但仍然能拿到真正的 Let's Encrypt 证书（Tailscale 通过 DNS-01 帮你签）。
 
 ### 1. 服务器和客户端都装 Tailscale
@@ -147,6 +150,8 @@ Spark 的"新邮件通知"实际上有两条独立路径：
 - 接受"打开 App 才同步" → Tailscale / 本地路径，凭据不出私网
 
 > **注意**：Tailscale / 本地路径下，Readdle 云端 IDLE 长期失败，Spark 会反复弹 "Can't reach the server" 横幅，甚至提示重新登录账户——这是云端把账户判成"故障"了，骚扰频率较高。最干净的解法是在 Spark 设置里把这个账户的**推送通知关掉**，云端就不再尝试 IDLE，横幅消失；代价是彻底失去离线推送（反正本来也收不到）。
+
+</details>
 
 ## 在 Spark 添加 163 账号
 
