@@ -10,6 +10,7 @@ import (
 
 func main() {
 	cfgPath := flag.String("c", "", "config file path (YAML), defaults to built-in defaults")
+	dataDir := flag.String("d", "", "data directory for TLS cert (default: ~/.163-wrapper)")
 	flag.Parse()
 
 	cfg, err := loadConfig(*cfgPath)
@@ -24,7 +25,7 @@ func main() {
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
 
-	tlsCfg, certPath, err := LoadOrCreateTLSConfig()
+	tlsCfg, certPath, err := LoadOrCreateTLSConfig(*dataDir)
 	if err != nil {
 		slog.Error("TLS setup failed", "err", err)
 		os.Exit(1)

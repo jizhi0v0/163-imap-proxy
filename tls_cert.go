@@ -19,20 +19,20 @@ const (
 	keyFile  = "key.pem"
 )
 
-// certDir 返回证书存放目录（~/.163-wrapper/），不存在时创建。
-func certDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	dir := filepath.Join(home, ".163-wrapper")
-	return dir, os.MkdirAll(dir, 0700)
-}
-
 // LoadOrCreateTLSConfig 加载已有证书，或首次自动生成自签证书并保存。
-func LoadOrCreateTLSConfig() (*tls.Config, string, error) {
-	dir, err := certDir()
-	if err != nil {
+// dataDir 为空时默认使用 ~/.163-wrapper/。
+func LoadOrCreateTLSConfig(dataDir string) (*tls.Config, string, error) {
+	var dir string
+	if dataDir != "" {
+		dir = dataDir
+	} else {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, "", err
+		}
+		dir = filepath.Join(home, ".163-wrapper")
+	}
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, "", err
 	}
 	cp := filepath.Join(dir, certFile)

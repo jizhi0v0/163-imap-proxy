@@ -1,0 +1,8 @@
+services:
+  163-wrapper:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "1993:1993"
+    volumes:
+      - ./data:/data
