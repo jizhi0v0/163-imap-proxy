@@ -1,4 +1,4 @@
-listen: "127.0.0.1:1993"         # 改为 "0.0.0.0:1993" 供 Tailscale / Ponte 远程访问
+listen: "0.0.0.0:993"            # 标准 IMAPS 端口；本机调试可改 "127.0.0.1:1993"（>1024 不需 root）
 upstream: "imap.163.com:993"
 upstream_tls_server_name: "imap.163.com"
 log_level: "info"                 # debug 打印每一行 IMAP 帧

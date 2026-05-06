@@ -23,7 +23,7 @@ type Config struct {
 
 func defaultConfig() Config {
 	return Config{
-		Listen:          "127.0.0.1:1993",
+		Listen:          "0.0.0.0:993",
 		Upstream:        "imap.163.com:993",
 		UpstreamTLSName: "imap.163.com",
 		LogLevel:        "info",

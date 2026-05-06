@@ -3,6 +3,6 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "1993:1993"
+      - "993:993"
     volumes:
       - ./data:/data

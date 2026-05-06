@@ -9,5 +9,5 @@ FROM scratch
 COPY --from=builder /163-wrapper /163-wrapper
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 VOLUME ["/data"]
-EXPOSE 1993
+EXPOSE 993
 ENTRYPOINT ["/163-wrapper", "-c", "/data/config.yaml", "-d", "/data"]

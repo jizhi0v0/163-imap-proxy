@@ -32,7 +32,7 @@ mkdir -p "$DATA_DIR"
 write_config() {
   if [ ! -f "${DATA_DIR}/config.yaml" ]; then
     cat > "${DATA_DIR}/config.yaml" <<EOF
-listen: "0.0.0.0:1993"
+listen: "0.0.0.0:993"
 upstream: "imap.163.com:993"
 upstream_tls_server_name: "imap.163.com"
 log_level: "info"
@@ -115,7 +115,7 @@ services:
     image: ghcr.io/jizhi0v0/163-gmail-server-wrapper:latest
     restart: unless-stopped
     ports:
-      - "1993:1993"
+      - "993:993"
     volumes:
       - ${DATA_DIR}:/data
 EOF
