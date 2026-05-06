@@ -78,6 +78,57 @@ echo | openssl s_client -connect mail.example.com:993 -servername mail.example.c
 
 看到 `Verify return code: 0 (ok)` 就成功了。
 
+## 可选：用 Tailscale 替代域名 + 公网
+
+不想买域名、不想暴露公网 993 端口的话，可以走 Tailscale。每台用邮件的设备（手机、电脑）也装 Tailscale 登同一账号即可——这样你跳过上面的 1、2、4 步，但仍然能拿到真正的 Let's Encrypt 证书（Tailscale 通过 DNS-01 帮你签）。
+
+### 1. 服务器和客户端都装 Tailscale
+
+服务器：
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+```
+
+按提示登录账号。Mac / iOS / Windows 直接装 Tailscale App 登同一账号。
+
+### 2. 在 Tailscale 后台启用 HTTPS
+
+[https://login.tailscale.com/admin/dns](https://login.tailscale.com/admin/dns) → 找到 "HTTPS Certificates" → 点 Enable HTTPS。同一页面顶部能看到你的 tailnet 名，形如 `tail-xxxxxx.ts.net`。
+
+### 3. 用 Tailscale 给服务器签证书
+
+服务器主机名假设是 `mailproxy`（`tailscale status` 第一行能看到），在服务器上执行：
+
+```bash
+sudo tailscale cert mailproxy.tail-xxxxxx.ts.net
+sudo cp mailproxy.tail-xxxxxx.ts.net.crt /etc/163-wrapper/cert.pem
+sudo cp mailproxy.tail-xxxxxx.ts.net.key /etc/163-wrapper/key.pem
+sudo chmod 600 /etc/163-wrapper/key.pem
+sudo systemctl restart 163-wrapper
+```
+
+证书 90 天有效期，加个 cron 自动续（**注意文件名不能带后缀**，Debian/Ubuntu 的 `run-parts` 会跳过含 `.` 的文件名）：
+
+```bash
+sudo tee /etc/cron.monthly/163-wrapper-cert > /dev/null <<'EOF'
+#!/bin/sh
+set -e
+cd /etc/163-wrapper
+tailscale cert mailproxy.tail-xxxxxx.ts.net
+mv mailproxy.tail-xxxxxx.ts.net.crt cert.pem
+mv mailproxy.tail-xxxxxx.ts.net.key key.pem
+chmod 600 key.pem
+systemctl restart 163-wrapper
+EOF
+sudo chmod +x /etc/cron.monthly/163-wrapper-cert
+```
+
+### 4. Spark 配置
+
+跟下文一样，把 IMAP Server 填成 `mailproxy.tail-xxxxxx.ts.net`，其他不变。设备只要连着 Tailscale，邮件就能正常收发。
+
 ## 在 Spark 添加 163 账号
 
 163 网页端先做一次：登录 → 设置 → POP3/SMTP/IMAP → **同时打开 IMAP 和 SMTP 服务** → **生成"客户端授权码"**（下面填的"密码"全部用这个授权码，不是登录密码）。
@@ -128,7 +179,7 @@ sudo journalctl -u 163-wrapper -f
 
 - 默认 `log_level: info`，只记录连接事件（远端 IP、`ID injected successfully` 等），不含任何凭据。
 - `log_level: debug` 时会打印每条 IMAP 帧用于排错，但 `LOGIN` / `AUTHENTICATE` 的密码字段会自动屏蔽成 `<REDACTED>`。
-- systemd 下日志由 journald 自动按磁盘空间轮转（默认约总盘 10%）。想严格限制：编辑 `/etc/systemd/journald.conf` 加 `SystemMaxUse=200M` 后 `sudo systemctl restart systemd-journald`。
+- systemd 下日志由 journald 自动按磁盘空间轮转，默认上限 `min(磁盘 10%, 4GB)`。想严格限制：编辑 `/etc/systemd/journald.conf` 加 `SystemMaxUse=200M` 后 `sudo systemctl restart systemd-journald`。
 - Docker 默认 json-file 日志驱动**不轮转**，长跑会涨；建议在 `docker-compose.yml` 里给服务加：
 
   ```yaml

@@ -113,11 +113,15 @@ install_docker() {
 services:
   163-wrapper:
     image: ghcr.io/jizhi0v0/163-imap-proxy:latest
+    container_name: 163-wrapper
     restart: unless-stopped
     ports:
       - "993:993"
     volumes:
       - ${DATA_DIR}:/data
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
 EOF
 
   info "Pulling image..."
@@ -136,9 +140,10 @@ case "$INSTALL_MODE" in
 esac
 
 echo ""
-success "Done! Cert saved to ${DATA_DIR}/cert.pem"
-info "Copy it to your Mac and trust it:"
-echo ""
-echo "    sudo security add-trusted-cert -d -r trustRoot \\"
-echo "      -k /Library/Keychains/System.keychain cert.pem"
+success "Wrapper installed. It is currently running with an auto-generated"
+success "self-signed certificate at ${DATA_DIR}/cert.pem."
+info ""
+info "Next step: replace it with a real certificate (Let's Encrypt or"
+info "Tailscale) so your mail client can connect without errors."
+info "See README → '4. 申请 Let's Encrypt 证书' or '可选：用 Tailscale 替代'."
 echo ""
