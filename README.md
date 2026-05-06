@@ -129,15 +129,24 @@ sudo chmod +x /etc/cron.monthly/163-wrapper-cert
 
 跟下文一样，把 IMAP Server 填成 `mailproxy.tail-xxxxxx.ts.net`，其他不变。设备只要连着 Tailscale，邮件就能正常收发。
 
-### 权衡：失去 Spark 推送通知
+### 权衡：失去 APNs 后台推送
 
-Spark 客户端在前台/活跃时是**本地**连 IMAP，Tailscale 完全够用；但 App 完全退出或设备长时间离线时，新邮件提醒由 **Readdle 云端**替你 IDLE 监听 IMAP 后通过 APNs 推送到设备——他们的服务器不在你 tailnet 里，所以这条路**收不到推送**，必须打开 App 手动刷新才能看到新邮件。
+Spark 的"新邮件通知"实际上有两条独立路径：
 
-这个限制对**任何非公网部署**都成立（局域网 / 家庭服务器 / Tailscale 都一样）。**只有"公网 VPS + 域名 + LE 证书"那条路能让 Readdle 云端 IDLE 你的 wrapper、保留实时推送**——代价是 163 授权码会被传到他们机房用于维持长连接。
+| 场景 | 通知来源 | 是否需要公网可达 |
+|------|----------|------------------|
+| App 在前台 / 最近用过（系统还没挂起 App） | 设备本地 IMAP IDLE 监听 wrapper，新邮件直接弹**本地通知** | ❌ Tailscale / 局域网都行 |
+| App 长时间后台 / 完全退出（iOS 已把 App 挂起） | 必须由 **Readdle 云端**自己跑 IMAP IDLE → 经 APNs 唤醒 App | ✅ Readdle 服务器必须能从公网连到 wrapper |
 
-按你对 push 的依赖度自己选：
-- 重度依赖即时通知 → 公网 VPS 路径
-- 不在乎几分钟延迟、追求凭据不出私网 → Tailscale / 本地路径
+也就是说，Tailscale 路线下你**前台用 Spark 时一切正常**，但 iOS 把 App 完全挂起后只能等你下次打开手动刷一下才看到新邮件。这个限制对**任何非公网部署**都成立（局域网 / 家庭服务器 / Tailscale 都一样）——APNs 推送的本质就是 Readdle 云端必须能 IDLE 你的 IMAP 服务器。
+
+只有"公网 VPS + 域名 + LE 证书"那条路能让 Readdle 云端连到 wrapper、保留 APNs 推送，代价是 163 授权码会被存到他们机房用于维持长连接（[Readdle 官方说明](https://support.readdle.com/spark/privacy/privacy-explained)）。
+
+按你对**离线推送**的依赖度自己选：
+- 必须随时收到新邮件提醒 → 公网 VPS 路径
+- 接受"打开 App 才同步" → Tailscale / 本地路径，凭据不出私网
+
+> **注意**：Tailscale / 本地路径下，Readdle 云端 IDLE 长期失败，Spark 会反复弹 "Can't reach the server" 横幅，甚至提示重新登录账户——这是云端把账户判成"故障"了，骚扰频率较高。最干净的解法是在 Spark 设置里把这个账户的**推送通知关掉**，云端就不再尝试 IDLE，横幅消失；代价是彻底失去离线推送（反正本来也收不到）。
 
 ## 在 Spark 添加 163 账号
 
